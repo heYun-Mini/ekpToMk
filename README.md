@@ -12,6 +12,7 @@
 | **迁移 Agent（LLM）** | [`05-agent/system-prompt.md`](./05-agent/system-prompt.md) → [`05-agent/workflow.md`](./05-agent/workflow.md) |
 | **迁移工程师（人）** | [`01-contracts/analysis-report-spec.md`](./01-contracts/analysis-report-spec.md) 了解输入 → [`04-migration-rules/`](./04-migration-rules/) 掌握规则 |
 | **首次接触本项目** | 先读本 README，再按下方"目录结构"逐层探索 |
+| **要生成分析报告** | 打开 [`07-tooling/standalone-form-js-extract.html`](./07-tooling/standalone-form-js-extract.html)（双击用浏览器打开），粘贴 EKP 表单 HTML 自动生成 |
 | **要开始一次实际迁移** | 把分析报告放入 [`06-workspace/inputs/<form-name>/`](./06-workspace/inputs/) |
 
 ---
@@ -56,8 +57,8 @@ ekpToMk/
 │   ├── output-template.md          # 输出 JS 骨架模板
 │   ├── validation-checklist.md     # 交付前自检清单
 │   └── examples/                   # ⭐ Few-shot 示例库
-│       ├── L1-simple-readonly/     # 简单只读联动（select→显隐）
-│       └── L3-indirect-write/      # 间接写入（DOM .value= 赋值）
+│       ├── L3-indirect-write/      # 间接写入（DOM .value= 赋值）
+│       └── L6-async-calltic/       # 异步接口（GetJdbcData→callTic）
 │
 ├── 06-workspace/                   # 【运行时数据】实际迁移工作区
 │   ├── README.md                   # 目录规范
@@ -65,6 +66,8 @@ ekpToMk/
 │   └── outputs/<form-name>/        # Agent 迁移产出
 │
 └── 07-tooling/                     # 【辅助工具】
+    ├── standalone-form-js-extract.html  # ⭐ 表单 JS 分析工具（浏览器打开）
+    ├── README.md                   # 工具目录说明
     └── glossary.md                 # 术语表
 ```
 
@@ -105,8 +108,8 @@ ekpToMk/
 ## 使用建议
 
 ### 单次迁移
-1. 在 [`06-workspace/inputs/`](./06-workspace/inputs/) 新建 `<form-name>/` 目录
-2. 放入 `analysis-report.md`（工具生成）+ `field-mapping.txt`（用户填写）
+1. 用 [`07-tooling/standalone-form-js-extract.html`](./07-tooling/standalone-form-js-extract.html) 生成 `analysis-report.md` 与 `field-mapping.txt` 模板，映射表填写新 ID
+2. 在 [`06-workspace/inputs/`](./06-workspace/inputs/) 新建 `<form-name>/` 目录，放入两份文件
 3. 让 Agent 读取 [`05-agent/system-prompt.md`](./05-agent/system-prompt.md) 启动
 4. Agent 输出到 [`06-workspace/outputs/<form-name>/`](./06-workspace/outputs/)
 

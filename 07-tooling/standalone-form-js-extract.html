@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>表单 JS 分析工具</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 24px;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #111;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 1024px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .hint {
+      font-size: 12px;
+      color: #999;
+      margin-left: 8px;
+    }
+    textarea {
+      width: 100%;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 13px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      resize: vertical;
+      background: #fafafa;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: #4a90e2;
+      background: white;
+    }
+    .button-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 8px 16px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #f0f0f0;
+      border-color: #ccc;
+    }
+    button:active {
+      background: #e0e0e0;
+    }
+    .stats {
+      font-size: 14px;
+      color: #16a34a;
+      font-weight: 500;
+    }
+    .error {
+      margin-top: 12px;
+      padding: 12px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 4px;
+      color: #b91c1c;
+      font-size: 14px;
+    }
+    .output-panel {
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover {
+      background: #f9fafb;
+      border-color: #ccc;
+    }
+    .copy-btn.copied {
+      background: #f0fdf4;
+      border-color: #86efac;
+      color: #166534;
+    }
+    .mapping-section {
+      margin-top: 24px;
+    }
+    .mapping-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .mapping-hint {
+      font-size: 12px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>表单 JS 分析</h1>
+    <p class="subtitle">
+      粘贴低代码表单 HTML，自动提取 JSP 片段中的 JS 代码，
+      识别引用的控件（含子表行级引用）与未匹配 ID，生成 Markdown 报告。
+      报告可直接复制给迁移 Agent 使用。
+    </p>
+
+    <div class="grid">
+      <div class="panel">
+        <label for="inputText">
+          表单 HTML
+          <span class="hint">内容自动保存在本地，刷新页面不会丢失</span>
+        </label>
+        <textarea
+          id="inputText"
+          rows="16"
+          placeholder="在此粘贴低代码表单 HTML（含 fd_type / fd_values 属性的 TABLE 结构）..."
+        ></textarea>
+        <div id="errorBox"></div>
+        <div class="button-row">
+          <button id="clearBtn">清空</button>
+          <button id="sampleBtn">加载示例</button>
+          <span id="statsBox" class="stats"></span>
+        </div>
+      </div>
+
+      <div class="panel output-panel">
+        <label>Markdown 报告</label>
+        <textarea
+          id="reportText"
+          rows="24"
+          readonly
+          placeholder="（粘贴表单 HTML 后自动生成报告）"
+        ></textarea>
+        <button class="copy-btn" id="copyReportBtn">复制</button>
+      </div>
+    </div>
+
+    <div id="mappingSection" class="mapping-section" style="display: none;">
+      <div class="mapping-label">
+        <label>字段映射模板</label>
+        <span class="mapping-hint">复制到新系统 JS 编辑器，对照 label 点击字段获取新 ID</span>
+      </div>
+      <div class="output-panel">
+        <textarea
+          id="mappingText"
+          rows="12"
+          readonly
+        ></textarea>
+        <button class="copy-btn" id="copyMappingBtn">复制</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+// ============================================================
+// 常量
+// ============================================================
+
+const XFORM_APIS_BY_ID = [
+  "GetXFormFieldById",
+  "GetXFormFieldValueById",
+  "SetXFormFieldValueById",
+  "AttachXFormValueChangeEventById",
+];
+
+const XFORM_APIS_BY_LABEL = [
+  "GetXFormFieldByLabel",
+  "GetXFormFieldValueByLabel",
+  "SetXFormFieldValueByLabel",
+  "AttachXFormValueChangeEventByLabel",
+];
+
+const NON_CONTROL_FD_TYPES = new Set(["standardTable", "detailsTable", "jsp"]);
+const NON_BUSINESS_FD_TYPES = new Set(["textLabel", "brcontrol"]);
+
+const API_ROLE_MAP = {
+  GetXFormFieldById: "read",
+  GetXFormFieldValueById: "read",
+  SetXFormFieldValueById: "write",
+  AttachXFormValueChangeEventById: "listen",
+};
+
+const ROLE_ORDER = ["read", "write", "listen"];
+
+const ROLE_LABEL = {
+  read: "读取",
+  write: "写入",
+  listen: "监听",
+};
+
+const JDBC_DATASET_BASE_URL =
+  "http://hetest.vanward.com:4430/sys/xform/maindata/jdbc_data_set/xFormjdbcDataSet.do?method=view&fdId=";
+
+const INPUT_STORAGE_KEY = "formJsExtract:input";
+
+// ============================================================
+// 工具函数
+// ============================================================
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseFdValues(str) {
+  const result = {};
+  if (!str) return result;
+
+  const s = str.trim();
+  if (!s.startsWith("{") || !s.endsWith("}")) {
+    const re = /([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*"([^"]*)"/g;
+    let m;
+    while ((m = re.exec(s)) !== null) result[m[1]] = m[2];
+    return result;
+  }
+
+  const inner = s.slice(1, -1);
+  let i = 0;
+
+  while (i < inner.length) {
+    while (i < inner.length && (inner[i] === "," || /\s/.test(inner[i]))) i++;
+    if (i >= inner.length) break;
+
+    const keyRe = /^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*/;
+    const keyMatch = keyRe.exec(inner.slice(i));
+    if (!keyMatch) {
+      i++;
+      continue;
+    }
+    const key = keyMatch[1];
+    i += keyMatch[0].length;
+    if (i >= inner.length) break;
+
+    const ch = inner[i];
+    if (ch === '"') {
+      let j = i + 1;
+      let value = "";
+      while (j < inner.length) {
+        const c = inner[j];
+        if (c === "\\" && j + 1 < inner.length) {
+          value += inner[j + 1];
+          j += 2;
+          continue;
+        }
+        if (c === '"') break;
+        value += c;
+        j++;
+      }
+      result[key] = value;
+      i = j + 1;
+    } else if (ch === "{" || ch === "[") {
+      let nested = 1;
+      let j = i + 1;
+      let inString = false;
+      while (j < inner.length && nested > 0) {
+        const c = inner[j];
+        if (inString) {
+          if (c === "\\") { j += 2; continue; }
+          if (c === '"') inString = false;
+        } else {
+          if (c === '"') inString = true;
+          else if (c === "{" || c === "[") nested++;
+          else if (c === "}" || c === "]") nested--;
+        }
+        j++;
+      }
+      i = j;
+    } else {
+      let j = i;
+      while (j < inner.length && inner[j] !== ",") j++;
+      result[key] = inner.slice(i, j).trim();
+      i = j;
+    }
+  }
+
+  return result;
+}
+
+function cleanJs(rawValue) {
+  let js = rawValue || "";
+  let hadScriptWrapper = false;
+
+  const scriptRe = /^\s*<script\b[^>]*>([\s\S]*?)<\/script>\s*$/i;
+  const m = js.match(scriptRe);
+  if (m) {
+    js = m[1];
+    hadScriptWrapper = true;
+  }
+
+  js = js.replace(/\r\n?/g, "\n");
+  js = js.split("\n").map((l) => l.replace(/[ \t]+$/, "")).join("\n");
+  js = js.replace(/\n{3,}/g, "\n\n");
+  js = js.replace(/^\n+/, "").replace(/\n+$/, "");
+
+  return { cleanedJs: js, hadScriptWrapper };
+}
+
+function parseForm(html) {
+  const warnings = [];
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  const tables = [];
+  const seenTableIds = new Set();
+  const tableEls = doc.querySelectorAll(
+    '[fd_type="standardTable"], [fd_type="detailsTable"]'
+  );
+  tableEls.forEach((el) => {
+    const fdType = el.getAttribute("fd_type");
+    const fdValues = parseFdValues(el.getAttribute("fd_values") || "");
+    const id = fdValues.id || el.getAttribute("id") || "";
+    if (!id || seenTableIds.has(id)) return;
+    seenTableIds.add(id);
+    tables.push({
+      id,
+      fdType,
+      label: fdValues.label || "",
+      isMain: fdType === "standardTable",
+    });
+  });
+
+  const controls = [];
+  const seenControlIds = new Set();
+  const allFdTypeEls = doc.querySelectorAll("[fd_type]");
+  allFdTypeEls.forEach((el) => {
+    const fdType = el.getAttribute("fd_type") || "";
+    if (!fdType || NON_CONTROL_FD_TYPES.has(fdType)) return;
+
+    const fdValuesRaw = el.getAttribute("fd_values") || "";
+    const fdValues = parseFdValues(fdValuesRaw);
+
+    let id = fdValues.id || el.getAttribute("id") || "";
+    if (!id) {
+      const childWithId = el.querySelector("[id]");
+      if (childWithId) id = childWithId.getAttribute("id") || "";
+    }
+
+    if (!id || seenControlIds.has(id)) return;
+    seenControlIds.add(id);
+
+    let label =
+      fdValues.label ||
+      fdValues.content ||
+      el.getAttribute("label") ||
+      "";
+    if (!label) {
+      label = (el.textContent || "").trim();
+    }
+
+    let tableName = el.getAttribute("tableName") || "";
+    if (!tableName) {
+      const childWithTableName = el.querySelector("[tableName]");
+      if (childWithTableName) {
+        tableName = childWithTableName.getAttribute("tableName") || "";
+      }
+    }
+    if (!tableName) {
+      let parent = el.parentElement;
+      while (parent) {
+        const pt = parent.getAttribute("fd_type");
+        if (pt === "standardTable" || pt === "detailsTable") {
+          const pv = parseFdValues(parent.getAttribute("fd_values") || "");
+          tableName = pv.id || parent.getAttribute("id") || "";
+          break;
+        }
+        parent = parent.parentElement;
+      }
+    }
+
+    controls.push({
+      id,
+      fdType,
+      label,
+      tableName,
+      canShow: fdValues.canShow !== "false",
+      isBusiness: !NON_BUSINESS_FD_TYPES.has(fdType),
+    });
+  });
+
+  const jspFragments = [];
+  const jspEls = doc.querySelectorAll('[fd_type="jsp"]');
+  jspEls.forEach((el) => {
+    const fdValues = parseFdValues(el.getAttribute("fd_values") || "");
+    const id = fdValues.id || el.getAttribute("id") || "";
+    const input = el.querySelector('input[type="hidden"]');
+    if (!input) {
+      warnings.push(`JSP 片段 ${id || "(未知 id)"} 未找到 input[type=hidden]，内容为空`);
+      jspFragments.push({ id, rawValue: "", cleanedJs: "", hadScriptWrapper: false });
+      return;
+    }
+    const rawValue = input.value || input.getAttribute("value") || "";
+    const { cleanedJs, hadScriptWrapper } = cleanJs(rawValue);
+    jspFragments.push({ id, rawValue, cleanedJs, hadScriptWrapper });
+  });
+
+  return { tables, controls, jspFragments, parseWarnings: warnings };
+}
+
+function scanReferences(js, controls, tables) {
+  if (!js) return [];
+
+  const controlIdSet = new Set(controls.map((c) => c.id));
+  const subTableIds = tables.filter((t) => !t.isMain).map((t) => t.id);
+
+  const refMap = new Map();
+  const ensureRef = (controlId) => {
+    let ref = refMap.get(controlId);
+    if (!ref) {
+      ref = {
+        controlId,
+        directCount: 0,
+        subTableRowOccurrences: [],
+        byLabelApis: [],
+        roles: [],
+      };
+      refMap.set(controlId, ref);
+    }
+    return ref;
+  };
+
+  for (const [apiName, role] of Object.entries(API_ROLE_MAP)) {
+    const apiEscaped = escapeRegExp(apiName);
+    const re = new RegExp(
+      `\\b${apiEscaped}\\s*\\(\\s*["']([^"']+)["']`,
+      "g"
+    );
+    let m;
+    while ((m = re.exec(js)) !== null) {
+      const arg = m[1];
+      if (controlIdSet.has(arg)) {
+        const ref = ensureRef(arg);
+        if (!ref.roles.includes(role)) ref.roles.push(role);
+        continue;
+      }
+      const rowMatch = /^([A-Za-z_][A-Za-z0-9_]*)\.\d+\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(arg);
+      if (rowMatch && controlIdSet.has(rowMatch[2])) {
+        const ref = ensureRef(rowMatch[2]);
+        if (!ref.roles.includes(role)) ref.roles.push(role);
+      }
+    }
+  }
+
+  const subRowCountPerFieldId = new Map();
+  for (const stId of subTableIds) {
+    const re = new RegExp(
+      `\\b${escapeRegExp(stId)}\\.(\\d+)\\.([A-Za-z_][A-Za-z0-9_]*)\\b`,
+      "g"
+    );
+    let m;
+    while ((m = re.exec(js)) !== null) {
+      const rowIndex = Number(m[1]);
+      const fieldId = m[2];
+      if (controlIdSet.has(fieldId)) {
+        const ref = ensureRef(fieldId);
+        ref.subTableRowOccurrences.push({ subTableId: stId, rowIndex });
+        subRowCountPerFieldId.set(
+          fieldId,
+          (subRowCountPerFieldId.get(fieldId) || 0) + 1
+        );
+      }
+    }
+  }
+
+  for (const id of controlIdSet) {
+    const re = new RegExp(`\\b${escapeRegExp(id)}\\b`, "g");
+    const total = (js.match(re) || []).length;
+    if (total === 0) continue;
+    const subCount = subRowCountPerFieldId.get(id) || 0;
+    const directCount = Math.max(0, total - subCount);
+    const ref = ensureRef(id);
+    ref.directCount = directCount;
+  }
+
+  return Array.from(refMap.values()).filter(
+    (r) => r.directCount > 0 || r.subTableRowOccurrences.length > 0
+  );
+}
+
+function detectUnmatched(js, controls, tables) {
+  if (!js) return [];
+
+  const controlIdSet = new Set(controls.map((c) => c.id));
+  const tableIdSet = new Set(tables.map((t) => t.id));
+
+  const candidates = [];
+  let m;
+
+  const xformRe = new RegExp(
+    `(${XFORM_APIS_BY_ID.join("|")})\\s*\\(\\s*["']([^"']+)["']`,
+    "g"
+  );
+  while ((m = xformRe.exec(js)) !== null) {
+    candidates.push({ rawArg: m[2], apiName: m[1] });
+  }
+
+  const domRe = /document\.getElementById\s*\(\s*["']([^"']+)["']/g;
+  while ((m = domRe.exec(js)) !== null) {
+    candidates.push({ rawArg: m[1], apiName: "document.getElementById" });
+  }
+
+  const jqRe = /\$\s*\(\s*["']#([^"']+)["']/g;
+  while ((m = jqRe.exec(js)) !== null) {
+    candidates.push({ rawArg: m[1], apiName: "$" });
+  }
+
+  const dedupMap = new Map();
+  for (const { rawArg, apiName } of candidates) {
+    let reason = null;
+
+    const qualified = rawArg.match(/^([^.]+)\.(\d+)\.([^.]+)$/);
+    if (qualified) {
+      const part1 = qualified[1];
+      const part3 = qualified[3];
+      if (!tableIdSet.has(part1)) {
+        reason = "unknown-sub-table";
+      } else if (!controlIdSet.has(part3)) {
+        reason = "unknown-field-in-sub-table";
+      }
+    } else {
+      if (!controlIdSet.has(rawArg) && !tableIdSet.has(rawArg)) {
+        reason = "unknown-id";
+      }
+    }
+
+    if (!reason) continue;
+
+    const key = `${rawArg}\u0000${reason}`;
+    const existing = dedupMap.get(key);
+    if (existing) {
+      if (!existing.apiNames.includes(apiName)) existing.apiNames.push(apiName);
+    } else {
+      dedupMap.set(key, {
+        rawArgument: rawArg,
+        apiNames: [apiName],
+        reason,
+      });
+    }
+  }
+
+  return Array.from(dedupMap.values());
+}
+
+function detectGlobalHooks(js) {
+  if (!js) {
+    return { declaresXFormOnValueChange: false, xFormOnValueChangeFunsPushCount: 0 };
+  }
+  const declaresXFormOnValueChange =
+    /function\s+XFormOnValueChange\s*\(/.test(js) ||
+    /XFormOnValueChange\s*=\s*function/.test(js) ||
+    /(?:const|let|var)\s+XFormOnValueChange\s*=/.test(js);
+  const xFormOnValueChangeFunsPushCount =
+    (js.match(/XFormOnValueChangeFuns\s*\.\s*push\s*\(/g) || []).length;
+  return { declaresXFormOnValueChange, xFormOnValueChangeFunsPushCount };
+}
+
+function detectLabelReferences(js, controls) {
+  if (!js) return [];
+  const results = [];
+  const re = new RegExp(
+    `(${XFORM_APIS_BY_LABEL.join("|")})\\s*\\(\\s*["']([^"']+)["']`,
+    "g"
+  );
+  let m;
+  while ((m = re.exec(js)) !== null) {
+    const apiName = m[1];
+    const label = m[2];
+    const matchedControlIds = controls
+      .filter((c) => c.label === label)
+      .map((c) => c.id);
+    results.push({ apiName, label, matchedControlIds });
+  }
+  return results;
+}
+
+function detectJdbcDataCalls(js) {
+  if (!js) return { references: [], totalCalls: 0 };
+
+  const allCallsRe = /\bGetJdbcData\s*\(/g;
+  const totalCalls = (js.match(allCallsRe) || []).length;
+
+  const results = [];
+  const seen = new Set();
+  const literalRe = /GetJdbcData\s*\(\s*["']([^"']+)["']/g;
+  let m;
+  while ((m = literalRe.exec(js)) !== null) {
+    const datasetId = m[1];
+    if (seen.has(datasetId)) continue;
+    seen.add(datasetId);
+
+    const afterFirstParam = js.slice(m.index + m[0].length);
+    const source = extractNthParamString(afterFirstParam, 2);
+
+    results.push({
+      datasetId,
+      source: source || "",
+      link: `${JDBC_DATASET_BASE_URL}${datasetId}`,
+    });
+  }
+  return { references: results, totalCalls };
+}
+
+function extractNthParamString(str, n) {
+  let depth = 0;
+  let commaCount = 0;
+  let i = 0;
+  let inString = false;
+  let stringChar = "";
+
+  while (i < str.length) {
+    const c = str[i];
+    if (inString) {
+      if (c === "\\") { i += 2; continue; }
+      if (c === stringChar) inString = false;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inString = true;
+      stringChar = c;
+      i++;
+      continue;
+    }
+    if (c === "{" || c === "[" || c === "(") { depth++; i++; continue; }
+    if (c === "}" || c === "]" || c === ")") {
+      depth--;
+      if (depth < 0) return null;
+      i++;
+      continue;
+    }
+    if (c === "," && depth === 0) {
+      commaCount++;
+      if (commaCount === n) {
+        let j = i + 1;
+        while (j < str.length && /\s/.test(str[j])) j++;
+        if (j < str.length && (str[j] === '"' || str[j] === "'")) {
+          const quote = str[j];
+          let end = j + 1;
+          while (end < str.length) {
+            if (str[end] === "\\") { end += 2; continue; }
+            if (str[end] === quote) break;
+            end++;
+          }
+          if (end < str.length) return str.slice(j + 1, end);
+        }
+        return null;
+      }
+    }
+    i++;
+  }
+  return null;
+}
+
+function formatTableOrigin(tableName, tableMap) {
+  if (!tableName) return "(未归属)";
+  const t = tableMap.get(tableName);
+  if (!t) return `(未知表: ${tableName})`;
+  return t.isMain ? "主表" : `子表: ${t.label || "(无 label)"}`;
+}
+
+function reasonLabel(reason) {
+  switch (reason) {
+    case "unknown-id":
+      return "未知 ID";
+    case "unknown-sub-table":
+      return "未知子表";
+    case "unknown-field-in-sub-table":
+      return "子表字段未知";
+    default:
+      return reason;
+  }
+}
+
+function formatRoles(roles) {
+  if (!roles || roles.length === 0) return "—";
+  const sorted = ROLE_ORDER.filter((r) => roles.includes(r));
+  return sorted.map((r) => ROLE_LABEL[r]).join(" · ");
+}
+
+function buildMarkdownReport(result) {
+  const lines = [];
+  const {
+    parsed,
+    mergedJs,
+    references,
+    unmatchedReferences,
+    globalHooks,
+    labelReferences,
+    jdbcDataReferences,
+    jdbcDataTotalCalls,
+  } = result;
+
+  const tableMap = new Map(parsed.tables.map((t) => [t.id, t]));
+  const controlMap = new Map(parsed.controls.map((c) => [c.id, c]));
+
+  lines.push("# 表单 JS 分析报告", "");
+
+  lines.push("## 表单元信息", "");
+  const mainTables = parsed.tables.filter((t) => t.isMain);
+  const subTables = parsed.tables.filter((t) => !t.isMain);
+
+  if (mainTables.length === 0) {
+    lines.push("- **主表**：（本次无）");
+  } else if (mainTables.length === 1) {
+    const t = mainTables[0];
+    lines.push(`- **主表**：\`${t.id}\`（${t.label || "(无 label)"}）`);
+  } else {
+    lines.push("- **主表**：");
+    for (const t of mainTables) {
+      lines.push(`  - \`${t.id}\`（${t.label || "(无 label)"}）`);
+    }
+  }
+
+  if (subTables.length === 0) {
+    lines.push("- **子表**：（本次无）");
+  } else {
+    lines.push("- **子表**：");
+    for (const t of subTables) {
+      lines.push(`  - \`${t.id}\`（${t.label || "(无 label)"}）`);
+    }
+  }
+
+  const businessControlCount = parsed.controls.filter((c) => c.isBusiness).length;
+  lines.push(`- **业务控件总数**：${businessControlCount}`);
+  lines.push(`- **JSP 片段数量**：${parsed.jspFragments.length}`);
+  lines.push("");
+
+  lines.push("## JS 片段（合并）", "");
+  if (parsed.jspFragments.length === 0) {
+    lines.push("（表单中未找到 JSP 片段）", "");
+  } else {
+    lines.push("```javascript");
+    lines.push(mergedJs);
+    lines.push("```", "");
+  }
+
+  lines.push("## JS 引用的控件", "");
+  if (references.length === 0) {
+    lines.push("（本次无）", "");
+  } else {
+    lines.push("| 控件 ID | label | 类型 | 所属表 | 直接引用 | 行级引用 | 入参/出参 |");
+    lines.push("|---|---|---|---|---|---|---|");
+    for (const ref of references) {
+      const c = controlMap.get(ref.controlId);
+      if (!c) continue;
+      const label = c.label || "(无 label)";
+      const origin = formatTableOrigin(c.tableName, tableMap);
+      const direct = ref.directCount > 0 ? String(ref.directCount) : "—";
+      const subRow =
+        ref.subTableRowOccurrences.length > 0
+          ? String(ref.subTableRowOccurrences.length)
+          : "—";
+      const rolesText = formatRoles(ref.roles);
+      lines.push(
+        `| \`${c.id}\` | ${label} | ${c.fdType} | ${origin} | ${direct} | ${subRow} | ${rolesText} |`
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push("## 未匹配引用", "");
+  if (unmatchedReferences.length === 0) {
+    lines.push("（本次无）", "");
+  } else {
+    lines.push("| 原始参数 | 出现的 API | 未匹配原因 |");
+    lines.push("|---|---|---|");
+    for (const u of unmatchedReferences) {
+      const apis = u.apiNames.map((a) => `\`${a}\``).join(", ");
+      lines.push(
+        `| \`${u.rawArgument}\` | ${apis} | ${reasonLabel(u.reason)} |`
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push("## 全局钩子", "");
+  const hookLines = [];
+  if (globalHooks.declaresXFormOnValueChange) {
+    hookLines.push("- 声明了 `XFormOnValueChange` 全局函数");
+  }
+  if (globalHooks.xFormOnValueChangeFunsPushCount > 0) {
+    hookLines.push(
+      `- \`XFormOnValueChangeFuns.push\` 调用次数：${globalHooks.xFormOnValueChangeFunsPushCount}`
+    );
+  }
+  if (hookLines.length === 0) {
+    lines.push("（本次无）", "");
+  } else {
+    lines.push(...hookLines, "");
+  }
+
+  lines.push("## 按 label 引用", "");
+  if (labelReferences.length === 0) {
+    lines.push("（本次无）", "");
+  } else {
+    lines.push("| API | label 参数 | 匹配到的控件 |");
+    lines.push("|---|---|---|");
+    for (const lr of labelReferences) {
+      const matched =
+        lr.matchedControlIds.length > 0
+          ? lr.matchedControlIds.map((id) => `\`${id}\``).join(", ")
+          : "(未匹配)";
+      lines.push(`| \`${lr.apiName}\` | ${lr.label} | ${matched} |`);
+    }
+    lines.push("");
+  }
+
+  lines.push("## 数据集调用", "");
+  if (jdbcDataTotalCalls === 0) {
+    lines.push("（本次无）", "");
+  } else {
+    lines.push(`\`GetJdbcData\` 调用次数：${jdbcDataTotalCalls}`, "");
+    if (jdbcDataReferences.length > 0) {
+      lines.push("| 数据集 ID | 数据源 | 定义链接 |");
+      lines.push("|---|---|---|");
+      for (const jr of jdbcDataReferences) {
+        const source = jr.source || "—";
+        lines.push(
+          `| \`${jr.datasetId}\` | ${source} | [查看](${jr.link}) |`
+        );
+      }
+      const unidentified = jdbcDataTotalCalls - jdbcDataReferences.length;
+      if (unidentified > 0) {
+        lines.push(
+          "",
+          `> 另有 ${unidentified} 次调用的数据集 ID 为变量，无法静态提取。`
+        );
+      }
+      lines.push("");
+    } else {
+      lines.push("（数据集 ID 均为变量，无法静态提取）", "");
+    }
+  }
+
+  if (parsed.parseWarnings.length > 0) {
+    lines.push("## 解析警告", "");
+    for (const w of parsed.parseWarnings) {
+      lines.push(`- ${w}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+function buildMappingTemplate(result) {
+  const { references, parsed } = result;
+  if (references.length === 0) return "";
+
+  const controlMap = new Map(parsed.controls.map((c) => [c.id, c]));
+  const tableMap = new Map(parsed.tables.map((t) => [t.id, t]));
+  const lines = [];
+
+  lines.push(`字段映射（共 ${references.length} 个）`);
+  lines.push("");
+
+  let idx = 1;
+  for (const ref of references) {
+    const ctrl = controlMap.get(ref.controlId);
+    if (!ctrl) continue;
+
+    const label = ctrl.label || "(无 label)";
+    const fdType = ctrl.fdType;
+    const rolesText = formatRoles(ref.roles);
+    const table = tableMap.get(ctrl.tableName);
+    const origin = table
+      ? table.isMain
+        ? "主表"
+        : `子表: ${table.label || ctrl.tableName}`
+      : "(未归属)";
+
+    lines.push(`${idx}. 旧ID: ${ctrl.id}`);
+    lines.push(`   label: ${label} | 类型: ${fdType} | 所属: ${origin} | 角色: ${rolesText}`);
+    lines.push(`   新ID: `);
+    lines.push("");
+    idx++;
+  }
+
+  return lines.join("\n");
+}
+
+function analyzeHtml(html) {
+  const parsed = parseForm(html);
+
+  const mergedJs = parsed.jspFragments
+    .map(
+      (f) =>
+        `// ==== JSP 片段: ${f.id || "(未知 id)"} ====\n${f.cleanedJs}`
+    )
+    .join("\n\n");
+
+  const references = scanReferences(mergedJs, parsed.controls, parsed.tables);
+  const unmatchedReferences = detectUnmatched(
+    mergedJs,
+    parsed.controls,
+    parsed.tables
+  );
+  const globalHooks = detectGlobalHooks(mergedJs);
+  const labelReferences = detectLabelReferences(mergedJs, parsed.controls);
+  const jdbcResult = detectJdbcDataCalls(mergedJs);
+
+  for (const lr of labelReferences) {
+    for (const cid of lr.matchedControlIds) {
+      let ref = references.find((r) => r.controlId === cid);
+      if (!ref) {
+        ref = {
+          controlId: cid,
+          directCount: 0,
+          subTableRowOccurrences: [],
+          byLabelApis: [],
+          roles: [],
+        };
+        references.push(ref);
+      }
+      if (!ref.byLabelApis.includes(lr.apiName)) {
+        ref.byLabelApis.push(lr.apiName);
+      }
+    }
+  }
+
+  const result = {
+    parsed,
+    mergedJs,
+    references,
+    unmatchedReferences,
+    globalHooks,
+    labelReferences,
+    jdbcDataReferences: jdbcResult.references,
+    jdbcDataTotalCalls: jdbcResult.totalCalls,
+    markdown: "",
+    mappingTemplate: "",
+  };
+  result.markdown = buildMarkdownReport(result);
+  result.mappingTemplate = buildMappingTemplate(result);
+  return result;
+}
+
+// ============================================================
+// 示例 HTML
+// ============================================================
+
+const SAMPLE_FORM_HTML = `&nbsp; 
+<TABLE id=fd_3aa1c3a5d5a944 class=tb_normal style="WIDTH: 98%" align=center fd_type="standardTable" fd_values='{id:"fd_3aa1c3a5d5a944",label:"主表"}' layout2col="undefined" formDesign="landray" label="主表">
+<TBODY>
+<TR>
+<TD class=td_normal_title style="TEXT-ALIGN: center" width=302 align=center row="0" column="0" style_textAlign="center"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3a8665296",content:"申请流水号",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">申请流水号</LABEL></TD>
+<TD width=372 row="0" column="1">
+<DIV class=xform_inputText style="WORD-WRAP: break-word; WIDTH: 132px; WORD-BREAK: break-all; DISPLAY: inline" fd_type="inputText" fd_values='{id:"fd_3aa1dd579b86be",width:"120",_label_bind:"true",label:"申请流水号",_label_bind_id:"fd_3aa1c3a8665296",canShow:"true",readOnly:"true",required:"false",dataType:"String",validate:"false",thousandShow:"false",tipInfo:"",formula:"$fdNumber$",defaultValue:"$申请单编号$",reCalculate:"true"}' formDesign="landray" canShow="true"><INPUT id=fd_3aa1dd579b86be class=inputsgl style="WIDTH: 120px" readOnly value=$申请单编号$ label="申请流水号" canShow="true" defaultValue="$申请单编号$" thousandShow="false" _readOnly="true" inputwidth="120px" _required="false" required="false" ? tableName="fd_3aa1c3a5d5a944"></DIV></TD>
+<TD class=td_normal_title style="TEXT-ALIGN: center" width=220 align=center row="0" column="2" style_textAlign="center"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3ae1f8ac8",content:"申请单位",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">申请单位</LABEL></TD>
+<TD width=446 row="0" column="3">
+<DIV class=xform_textArea style="HEIGHT: 40px; WIDTH: 267px; DISPLAY: inline-block" fd_type="textarea" fd_values='{id:"fd_3aa1dd59130a0c",width:"250",height:"40",_label_bind:"true",label:"申请单位",_label_bind_id:"fd_3aa1c3ae1f8ac8",canShow:"true",readOnly:"false",required:"true",dataType:"String",maxlength:"",tipInfo:"",formula:"$组织架构.获取组织架构对象全路径$($docCreator$)",defaultValue:"$组织架构.获取组织架构对象全路径$($申请人$)",reCalculate:"true"}' formDesign="landray"><TEXTAREA id=fd_3aa1dd59130a0c class=inputmul style="HEIGHT: 40px; WIDTH: 250px" readOnly label="申请单位" canShow="true" defaultValue="$组织架构.获取组织架构对象全路径$($申请人$)" _readOnly="false" _required="true" required="true" ? tableName="fd_3aa1c3a5d5a944">$组织架构.获取组织架构对象全路径$($申请人$)</TEXTAREA><SPAN class=txtstrong>*</SPAN></DIV></TD></TR>
+<TR>
+<TD class=td_normal_title style="TEXT-ALIGN: center" width=337 align=center row="1" column="0" style_textAlign="center"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3af0ab888",content:"申请人",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">申请人</LABEL></TD>
+<TD width=401 row="1" column="1"><LABEL class=xform_address style="WIDTH: 158px; DISPLAY: inline" fd_type="address" fd_values='{id:"fd_3aa1dd5bf31c58",width:"120",_label_bind:"false",label:"申请人姓名",_label_bind_id:"fd_3aa1c3af0ab888",_org_person:"true",_orgType:"ORG_TYPE_PERSON",readOnly:"false",required:"true",businessType:"addressDialog",multiSelect:"false",orgType:"",_org_org:"false",_org_dept:"false",_org_post:"false",_org_group:"false",defaultValue:"ORG_TYPE_PERSON"}' formDesign="landray"><INPUT id=fd_3aa1dd5bf31c58 class=inputsgl style="WIDTH: 120px" readOnly value=提交人 label="申请人姓名" canShow="true" defaultValue="ORG_TYPE_PERSON" thousandShow="true" _readOnly="false" inputwidth="120px" _required="true" required="true" ? tableName="fd_3aa1c3a5d5a944" businessType="addressDialog" multiSelect="false" orgType="ORG_TYPE_PERSON"><SPAN class=txtstrong>*</SPAN><LABEL>&nbsp;<A>选择</A></LABEL></LABEL> 
+<DIV id=fd_3aa3753ff2af7e title=JSP片段 style="WIDTH: 25px; DISPLAY: inline" fd_type="jsp" fd_values='{id:"fd_3aa3753ff2af7e"}' formDesign="landray" mobileView="default"><SPAN onmouseover=_Designer_Control_JSP_Onmouseover(event,this); ondblclick="Designer_Control_JSP_ShowEditFrame(event, this);" onmouseout=_Designer_Control_JSP_Onmouseout(event,this); style="HEIGHT: 24px; WIDTH: 24px; BACKGROUND: url(style/img/jsp.png) no-repeat; POSITION: relative; MARGIN: 0px; DISPLAY: inline-block"><INPUT type=hidden value='<script type="text/javascript">&#13;&#10;&#13;&#10;&#9;$(function(){&#9;&#9;&#9;&#9;&#9;&#13;&#10;&#9;&#9;setTimeout("AddInput()",1000);&#13;&#10;&#9;})&#13;&#10;&#9;&#13;&#10;&#9;AttachXFormValueChangeEventById("fd_ChanPinType",function(){AddInput();});&#9;&#13;&#10;&#13;&#10;&#9;function AddInput(){&#13;&#10;&#9;&#9;var TargetInput=GetXFormFieldById("fd_CustomType",true);&#13;&#10;&#9;&#9;var SourceSelect=GetXFormFieldById("fd_ChanPinType",true);&#13;&#10;&#9;&#9;var RequiredSpan=document.createElement("span");&#13;&#10;&#9;&#9;RequiredSpan.innerHTML="*";&#13;&#10;&#9;&#9;RequiredSpan.className="txtstrong";&#13;&#10;&#9;&#9;&#13;&#10;&#9;&#9;for(i=0;i<SourceSelect.length;i++){&#13;&#10;&#9;&#9;&#9;if(SourceSelect[i].value=="0"){&#13;&#10;&#9;&#9;&#9;&#9;if(!(TargetInput[i].hasAttribute("validate"))){&#13;&#10;&#9;&#9;&#9;&#9;&#9;TargetInput[i].style.display="inline";&#13;&#10;&#9;&#9;&#9;&#9;&#9;TargetInput[i].setAttribute("validate","required");&#13;&#10;&#9;&#9;&#9;&#9;&#9;TargetInput[i].parentNode.appendChild(RequiredSpan);&#13;&#10;&#9;&#9;&#9;&#9;}&#9;&#9;&#13;&#10;&#9;&#9;&#9;}else{&#13;&#10;&#9;&#9;&#9;&#9;TargetInput[i].style.display="none";&#13;&#10;&#9;&#9;&#9;&#9;TargetInput[i].removeAttribute("validate");&#13;&#10;&#9;&#9;&#9;&#9;TargetInput[i].value="";&#13;&#10;&#9;&#9;&#9;&#9;if(TargetInput[i].parentNode.children.length>1){&#13;&#10;&#9;&#9;&#9;&#9;&#9;TargetInput[i].parentNode.removeChild(TargetInput[i].parentNode.children[1]);&#13;&#10;&#9;&#9;&#9;&#9;}&#13;&#10;&#9;&#9;&#9;}&#13;&#10;&#9;&#9;}&#13;&#10;&#9;}&#13;&#10;&#13;&#10;<\/script>'></SPAN></DIV></TD>
+<TD class=td_normal_title style="TEXT-ALIGN: center" width=239 align=center row="1" column="2" style_textAlign="center"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3afc79cd4",content:"申请时间",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">申请时间</LABEL></TD>
+<TD width=462 row="1" column="3"><LABEL class=xform_datetime style="WIDTH: 158px; DISPLAY: inline" fd_type="datetime" fd_values='{id:"fd_3aa1dd65715920",width:"120",_label_bind:"true",label:"申请时间",_label_bind_id:"fd_3aa1c3afc79cd4",canShow:"true",readOnly:"false",required:"true",businessType:"dateDialog",defaultValue:"nowTime",_selectValue:"",reCalculate:"false"}' formDesign="landray"><INPUT id=fd_3aa1dd65715920 class=inputsgl style="WIDTH: 120px" readOnly value=当前时间 label="申请时间" canShow="true" defaultValue="nowTime" thousandShow="true" _readOnly="false" inputwidth="120px" _required="true" required="true" ? tableName="fd_3aa1c3a5d5a944" businessType="dateDialog"><SPAN class=txtstrong>*</SPAN><LABEL>&nbsp;<A>选择</A></LABEL></LABEL></TD></TR>
+<TR>
+<TD class=td_normal_title style="WIDTH: auto; TEXT-ALIGN: center" width=1486 colSpan=4 align=center row="2" column="0,1,2,3" style_textAlign="center">
+<TABLE id=fd_3aa1c3c0849216 class=tb_normal style="WIDTH: 100%" width="100%" align=center fd_type="detailsTable" fd_values='{cell:"6",_label_bind:"false",label:"产品拆解明细表",id:"fd_3aa1c3c0849216",width:"100%",showRow:"1",showIndex:"true",required:"false",showStatisticRow:"true",showCopyOpt:"true",excelExport:"false",excelImport:"false",layout2col:"mobile"}' layout2col="mobile" formDesign="landray" label="产品拆解明细表" required="false" tableName="fd_3aa1c3a5d5a944" excelimport="false" excelexport="false" showcopyopt="true" showStatisticRow="true" showrow="1" showIndex="true">
+<TBODY>
+<TR class=tr_normal_title style="HEIGHT: 33px" type="titleRow">
+<TD class=td_normal_title style="WIDTH: 15px" align=center row="0" column="0" colType="selectCol"></TD>
+<TD class=td_normal_title style="WIDTH: 25px; WHITE-SPACE: nowrap" align=center row="0" column="1" colType="noTitle"><LABEL attach="fd_3aa1c3c0849216">序号</LABEL></TD>
+<TD class=td_normal_title align=center row="0" column="2"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3cd5add50",content:"产品仓位",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">产品仓位</LABEL></TD>
+<TD class=td_normal_title align=center row="0" column="3"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3ce9d05cc",content:"产品来源",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">产品来源</LABEL></TD>
+<TD class=td_normal_title align=center row="0" column="4"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3cf24922c",content:"产品类型",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">产品类型</LABEL></TD>
+<TD align=center row="0" column="5"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3f473d954",content:"单位",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">单位</LABEL></TD>
+<TD align=center row="0" column="6"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3f534b8d8",content:"台数",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">台数</LABEL></TD>
+<TD align=center row="0" column="7"><LABEL class=xform_label style="WIDTH: auto; DISPLAY: inline" fd_type="textLabel" fd_values='{id:"fd_3aa1c3f607c582",content:"备注",font:"",size:"",color:"",effect:"",b:"false",i:"false",underline:"false",isHiddenInMobile:"false"}' formDesign="landray" isHiddenInMobile="false">备注</LABEL></TD>
+<TD class=td_normal_title style="WIDTH: 48px" align=center row="0" column="8" colType="blankTitleCol"></TD></TR>
+<TR type="templateRow">
+<TD style="WIDTH: 15px" align=center row="1" column="0" colType="selectCol"><INPUT type=checkbox name=DocList_Selected></TD>
+<TD style="WIDTH: 25px" align=center row="1" column="1" colType="noTemplate"><LABEL attach="fd_3aa1c3c0849216">1</LABEL></TD>
+<TD style="TEXT-ALIGN: center" align=left row="1" column="2" style_textAlign="center">
+<DIV class=xform_inputRadio style="WIDTH: auto; DISPLAY: inline" fd_type="inputRadio" fd_values='{id:"fd_3aa1ddba5eb0c0",_label_bind:"true",label:"产品仓位",_label_bind_id:"fd_3aa1c3cd5add50",canShow:"true",required:"true",alignment:"V",dataType:"String",items:"杏坛退货待检仓&amp;#;杏坛电商返修仓&amp;#;杏坛售后返修仓（梅赛思）&amp;#;杏坛退货待检仓（合肥）&amp;#;红旗退货待检2仓（合肥）",formula:"",defaultValue:"",reCalculate:"false"}' formDesign="landray"><INPUT id=fd_3aa1ddba5eb0c0 type=radio value=杏坛退货待检仓 label="产品仓位" _required="true" required="true" tableName="fd_3aa1c3c0849216" alignment="V" items="杏坛退货待检仓;杏坛电商返修仓;杏坛售后返修仓（梅赛思）;杏坛退货待检仓（合肥）;红旗退货待检2仓（合肥）" itemValues="杏坛退货待检仓;杏坛电商返修仓;杏坛售后返修仓（梅赛思）;杏坛退货待检仓（合肥）;红旗退货待检2仓（合肥）"><SPAN class=txtstrong>*</SPAN></DIV></TD>
+<TD align=center row="1" column="3">
+<DIV class="select_div_box xform_Select" style="WIDTH: auto; DISPLAY: inline" fd_type="select" fd_values='{id:"fd_3aa1ddf9f1a3f0",_label_bind:"true",label:"产品来源",_label_bind_id:"fd_3aa1c3ce9d05cc",canShow:"true",required:"true",dataType:"String",items:"三包机&amp;#;售前机&amp;#;电商机",formula:"",defaultValue:"",reCalculate:"false"}' formDesign="landray"><SELECT id=fd_3aa1ddf9f1a3f0 style="DISPLAY: none" label="产品来源" canShow="true" _required="true" required="true" tableName="fd_3aa1c3c0849216" items="三包机;售前机;电商机" itemvalues="三包机;售前机;电商机"></SELECT></DIV></TD>
+<TD align=center row="1" column="4">
+<DIV class="select_div_box xform_Select" style="WIDTH: auto; DISPLAY: inline" fd_type="select" fd_values='{id:"fd_ChanPinType",_label_bind:"true",label:"产品类型",_label_bind_id:"fd_3aa1c3cf24922c",canShow:"true",required:"true",dataType:"String",items:"燃气热水器&amp;#;电热水器&amp;#;烟机&amp;#;灶具&amp;#;壁挂炉&amp;#;净水器&amp;#;消毒柜&amp;#;集成灶&amp;#;热泵热水器&amp;#;新能源水箱&amp;#;采暖机&amp;#;电蒸箱&amp;#;洗碗机&amp;#;烤炉烤箱&amp;#;暖风机&amp;#;以上都没有|0",formula:"",defaultValue:"",reCalculate:"false"}' formDesign="landray"><SELECT id=fd_ChanPinType style="DISPLAY: none" label="产品类型" canShow="true" _required="true" required="true" tableName="fd_3aa1c3c0849216" items="燃气热水器;电热水器;烟机;灶具;壁挂炉;净水器;消毒柜;集成灶;热泵热水器;新能源水箱;采暖机;电蒸箱;洗碗机;烤炉烤箱;暖风机;以上都没有" itemvalues="燃气热水器;电热水器;烟机;灶具;壁挂炉;净水器;消毒柜;集成灶;热泵热水器;新能源水箱;采暖机;电蒸箱;洗碗机;烤炉烤箱;暖风机;0"></SELECT></DIV>
+<DIV class=xform_inputText style="WORD-WRAP: break-word; WIDTH: 117px; WORD-BREAK: break-all; DISPLAY: inline" fd_type="inputText" fd_values='{id:"fd_CustomType",width:"105",_label_bind:"false",label:"产品类型自定义",_label_bind_id:"fd_3aa1c3cf24922c",canShow:"true",readOnly:"false",required:"false",dataType:"String",validate:"false",thousandShow:"false",tipInfo:"",formula:"",defaultValue:"",reCalculate:"false"}' formDesign="landray" canShow="true"><INPUT id=fd_CustomType class=inputsgl style="WIDTH: 105px" readOnly label="产品类型自定义" canShow="true" thousandShow="false" _readOnly="false" inputwidth="105px" _required="false" required="false" ? tableName="fd_3aa1c3c0849216"></DIV></TD>
+<TD style="TEXT-ALIGN: center" align=center row="1" column="5" style_textAlign="center">
+<DIV class=xform_inputText style="WORD-WRAP: break-word; WIDTH: 34px; WORD-BREAK: break-all; DISPLAY: inline" fd_type="inputText" fd_values='{id:"fd_3aa1e0baf21938",width:"17",_label_bind:"true",label:"单位",_label_bind_id:"fd_3aa1c3f473d954",canShow:"true",readOnly:"false",required:"true",dataType:"String",validate:"false",thousandShow:"false",tipInfo:"",formula:"",defaultValue:"台",reCalculate:"false"}' formDesign="landray" canShow="true"><INPUT id=fd_3aa1e0baf21938 class=inputsgl style="WIDTH: 17px" readOnly value=台 label="单位" canShow="true" defaultValue="台" thousandShow="false" _readOnly="false" inputwidth="17px" _required="true" required="true" ? tableName="fd_3aa1c3c0849216"><SPAN class=txtstrong>*</SPAN></DIV></TD>
+<TD align=center row="1" column="6">
+<DIV class=xform_inputText style="WORD-WRAP: break-word; WIDTH: 70px; WORD-BREAK: break-all; DISPLAY: inline" fd_type="inputText" fd_values='{id:"fd_3aa1e0d0a379f4",width:"53",_label_bind:"true",label:"台数",_label_bind_id:"fd_3aa1c3f534b8d8",canShow:"true",readOnly:"false",required:"true",dataType:"String",validate:"false",thousandShow:"false",tipInfo:"",formula:"",defaultValue:"",reCalculate:"false"}' formDesign="landray" canShow="true"><INPUT id=fd_3aa1e0d0a379f4 class=inputsgl style="WIDTH: 53px" readOnly label="台数" canShow="true" thousandShow="false" _readOnly="false" inputwidth="53px" _required="true" required="true" ? tableName="fd_3aa1c3c0849216"><SPAN class=txtstrong>*</SPAN></DIV></TD>
+<TD align=center row="1" column="7">
+<DIV class=xform_textArea style="HEIGHT: 40px; WIDTH: 146px; DISPLAY: inline-block" fd_type="textarea" fd_values='{id:"fd_3aa1e0da60b71e",width:"146",height:"40",_label_bind:"true",label:"备注",_label_bind_id:"fd_3aa1c3f607c582",canShow:"true",readOnly:"false",required:"false",dataType:"String",maxlength:"",tipInfo:"",formula:"",defaultValue:"",reCalculate:"false"}' formDesign="landray"><TEXTAREA id=fd_3aa1e0da60b71e class=inputmul style="HEIGHT: 40px; WIDTH: 146px" readOnly label="备注" canShow="true" defaultValue="" _readOnly="false" _required="false" required="false" ? tableName="fd_3aa1c3c0849216"></TEXTAREA></DIV></TD>
+<TD style="WIDTH: 48px" align=center row="1" column="8" colType="copyCol"></TD></TR>
+</TBODY></TABLE></TD></TR></TBODY></TABLE>`;
+
+// ============================================================
+// UI 逻辑
+// ============================================================
+
+const inputText = document.getElementById("inputText");
+const reportText = document.getElementById("reportText");
+const mappingText = document.getElementById("mappingText");
+const mappingSection = document.getElementById("mappingSection");
+const errorBox = document.getElementById("errorBox");
+const statsBox = document.getElementById("statsBox");
+const clearBtn = document.getElementById("clearBtn");
+const sampleBtn = document.getElementById("sampleBtn");
+const copyReportBtn = document.getElementById("copyReportBtn");
+const copyMappingBtn = document.getElementById("copyMappingBtn");
+
+function readStoredInput() {
+  try {
+    return localStorage.getItem(INPUT_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredInput(value) {
+  try {
+    if (value) {
+      localStorage.setItem(INPUT_STORAGE_KEY, value);
+    } else {
+      localStorage.removeItem(INPUT_STORAGE_KEY);
+    }
+  } catch {
+    // 存储配额不足时忽略
+  }
+}
+
+function applyInput(value) {
+  inputText.value = value;
+  writeStoredInput(value);
+  updateReport();
+}
+
+function updateReport() {
+  const html = inputText.value;
+  errorBox.innerHTML = "";
+  statsBox.textContent = "";
+  reportText.value = "";
+  mappingText.value = "";
+  mappingSection.style.display = "none";
+
+  if (!html.trim()) {
+    reportText.placeholder = "（粘贴表单 HTML 后自动生成报告）";
+    return;
+  }
+
+  try {
+    const result = analyzeHtml(html);
+    reportText.value = result.markdown;
+    
+    if (result.mappingTemplate) {
+      mappingText.value = result.mappingTemplate;
+      mappingSection.style.display = "block";
+    }
+
+    const mainCount = result.parsed.tables.filter((t) => t.isMain).length;
+    const subCount = result.parsed.tables.filter((t) => !t.isMain).length;
+    const ctrlCount = result.parsed.controls.filter((c) => c.isBusiness).length;
+    const jspCount = result.parsed.jspFragments.length;
+    const refCount = result.references.length;
+    const unCount = result.unmatchedReferences.length;
+
+    statsBox.textContent = `主表 ${mainCount} / 子表 ${subCount} · 控件 ${ctrlCount} · JSP 片段 ${jspCount} · 引用 ${refCount} · 未匹配 ${unCount}`;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "未知错误";
+    errorBox.innerHTML = `<div class="error">解析失败: ${msg}</div>`;
+  }
+}
+
+function copyToClipboard(text, button) {
+  navigator.clipboard.writeText(text).then(() => {
+    const originalText = button.textContent;
+    button.textContent = "已复制";
+    button.classList.add("copied");
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.classList.remove("copied");
+    }, 2000);
+  });
+}
+
+// 初始化
+const stored = readStoredInput();
+if (stored) {
+  inputText.value = stored;
+  updateReport();
+}
+
+// 事件绑定
+inputText.addEventListener("input", () => {
+  applyInput(inputText.value);
+});
+
+clearBtn.addEventListener("click", () => {
+  applyInput("");
+});
+
+sampleBtn.addEventListener("click", () => {
+  applyInput(SAMPLE_FORM_HTML);
+});
+
+copyReportBtn.addEventListener("click", () => {
+  if (reportText.value) {
+    copyToClipboard(reportText.value, copyReportBtn);
+  }
+});
+
+copyMappingBtn.addEventListener("click", () => {
+  if (mappingText.value) {
+    copyToClipboard(mappingText.value, copyMappingBtn);
+  }
+});
+  </script>
+</body>
+</html>
