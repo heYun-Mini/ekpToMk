@@ -1,0 +1,35 @@
+字段映射（共 7 个）
+
+1. 旧ID: fd_clothingType
+   label: 服装性质 | 类型: select | 所属: 主表 | 角色: 读取
+   新ID: mkModelId.fd_clothingType
+
+2. 旧ID: fd_SumNumber
+   label: 汇总数量 | 类型: textarea | 所属: 主表 | 角色: 读取（实为间接写入，见报告盲区说明）
+   新ID: mkModelId.fd_SumNumber
+
+3. 旧ID: fd_clothingCode
+   label: 物料编号 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 读取
+   新ID: mkModelId_details.fd_clothingCode
+
+4. 旧ID: fd_clothingName
+   label: 物料名称 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 读取
+   新ID: mkModelId_details.fd_clothingName
+
+5. 旧ID: fd_clothingSpecs
+   label: 规格 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 读取
+   新ID: mkModelId_details.fd_clothingSpecs
+
+6. 旧ID: fd_actualNumber
+   label: 申请数量 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 读取
+   新ID: mkModelId_details.fd_actualNumber
+
+7. 旧ID: fd_clothingUomtrl
+   label: 单位 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 读取
+   新ID: mkModelId_details.fd_clothingUomtrl
+
+---
+备注：
+- 子表自身（制服衬衫领用明细表）在 MK 中的 tableId 为 mkModelId_details。
+- 服装性质 fd_clothingType 的选项 value 在新表单中为 "制服-员工领用"
+  （EKP 原判断值为 "制服/衬衫-员工领用"，迁移时以新表单实际 value 为准）。

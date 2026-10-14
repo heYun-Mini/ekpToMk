@@ -1,0 +1,13 @@
+字段映射（共 3 个）
+
+1. 旧ID: fd_3aa1c3c0849216
+   label: 产品拆解明细表 | 类型: detailsTable | 所属: (子表自身) | 角色: -
+   新ID: fdNewDetailTable
+
+2. 旧ID: fd_ChanPinType
+   label: 产品类型 | 类型: select | 所属: 子表: 产品拆解明细表 | 角色: 读取 · 监听
+   新ID: fdNewChanPinType
+
+3. 旧ID: fd_CustomType
+   label: 产品类型自定义 | 类型: inputText | 所属: 子表: 产品拆解明细表 | 角色: 读取
+   新ID: fdNewCustomType

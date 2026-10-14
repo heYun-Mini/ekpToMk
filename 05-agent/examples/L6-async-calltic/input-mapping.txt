@@ -1,0 +1,24 @@
+字段映射（共 4 个）
+
+1. 旧ID: fd_clothingName
+   label: 物料名称 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 读取（callTic 入参 name）
+   新ID: mk_model_20260814t18f5_d_79ls9.fd_clothingName
+
+2. 旧ID: fd_actualUserCode
+   label: 工号 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 读取（callTic 入参 empId）
+   新ID: mk_model_20260814t18f5_d_79ls9.fd_actualUserCode
+
+3. 旧ID: fd_lastTime
+   label: 最后领用时间 | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 写入（回填 yymmdd）
+   新ID: mk_model_20260814t18f5_d_79ls9.fd_lastTime
+
+4. 旧ID: fd_usedYear
+   label: 已领用年限（年） | 类型: inputText | 所属: 子表: 制服衬衫领用明细表 | 角色: 写入（回填 years）
+   新ID: mk_model_20260814t18f5_d_79ls9.fd_usedYear
+
+---
+备注：
+- 子表自身（制服衬衫领用明细表）在 MK 中的 tableId 为 mk_model_20260814t18f5_d_79ls9。
+- MK 集成平台接口 interfaceCode: function_2d58a9ba2b3068f4
+  入参: { name: string, empId: string }
+  出参: res.data 为数组 [{ yymmdd: string, years: number }]
