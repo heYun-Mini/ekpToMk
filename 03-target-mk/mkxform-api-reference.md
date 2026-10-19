@@ -2231,6 +2231,32 @@ console.log('流程实例ID', pid)
 
 ---
 
+#### 9.1.5 `获取流程当前节点编号`
+
+**描述：** 调用流程平台接口获取流程当前节点编号，返回以';'分隔的节点编号
+
+代码（可直接复制）：
+
+```javascript
+/**
+ * 获取流程当前节点编号
+ * 回调函数 callback
+* 1. 参数error，当请求出错是会返回错误信息
+* 2. 参数res，请求数据
+* {"type":"string"}
+ */
+function getCurrentNodesNumber() {
+  var formid = MKXFORM.formId
+  var instanceId = MKXFORM.processInstanceId
+  MKXFORM.callLbpm({
+    functionCode: "getCurrentNodesNumber",
+    param: { "formInstanceId": formid, "processInstanceId": instanceId }
+  }, function (error, res) {
+    console.log('当前流程节点编号为：',res)
+  })
+}
+```
+
 ### 9.2 异步流程函数（lbpms）
 
 > 仅在 `initDesign` 中异步注册，API 名称格式为 `promise_<name>`，数量取决于后端返回。
